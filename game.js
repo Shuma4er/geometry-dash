@@ -221,27 +221,17 @@ class GeometryDash {
         this.currentTheme = 0;
     }
 
-    createClouds() {
-        this.clouds = [];
-        const cloudCount = Math.floor(this.canvas.width / 150) + 3; // Количество облаков в зависимости от ширины
-
-        for (let i = 0; i < cloudCount; i++) {
-            this.clouds.push({
-                x: Math.random() * this.canvas.width * 1.5,
-                y: Math.random() * 150 + 50,
-                width: Math.random() * 80 + 60,
-                height: Math.random() * 40 + 30,
-                speed: Math.random() * 0.5 + 0.2,
-                opacity: Math.random() * 0.4 + 0.3
-            });
-        }
-    }
-
     createGrass() {
         this.grassBlades = [];
         const grassCount = Math.floor(this.canvas.width / 10); // Количество травинок
 
         for (let i = 0; i < grassCount; i++) {
+            // Решаем, будет ли у этой травинки цветок (один раз, а не каждый кадр)
+            const hasFlower = Math.random() > 0.7;
+            const flowerColor = hasFlower ?
+                ['#FF6B6B', '#FFD166', '#FF4081'][Math.floor(Math.random() * 3)] :
+                null;
+
             this.grassBlades.push({
                 x: i * 10 + Math.random() * 5,
                 baseHeight: Math.random() * 15 + 10, // Базовая высота травинки
@@ -249,13 +239,15 @@ class GeometryDash {
                 waveOffset: Math.random() * Math.PI * 2, // Случайное смещение для волны
                 width: Math.random() * 1 + 0.5, // Толщина травинки
                 speed: Math.random() * 0.03 + 0.01, // Скорость колебания
-                color: this.getGrassColor() // Цвет травинки
+                color: this.getGrassColor(), // Цвет травинки
+                hasFlower: hasFlower, // Есть ли цветок (запоминаем, а не решаем каждый кадр)
+                flowerColor: flowerColor // Цвет цветка (если есть)
             });
         }
     }
 
     getGrassColor() {
-        // Возвращает случайный зеленый цвет для травинки
+        // Возвращает случайный зеленый цвет для травинки (один раз при создании)
         const greens = ['#4CAF50', '#66BB6A', '#81C784', '#43A047', '#388E3C'];
         return greens[Math.floor(Math.random() * greens.length)];
     }
@@ -879,7 +871,7 @@ class GeometryDash {
             const waveEffect = Math.sin(blade.waveOffset + x * 0.01) * 2;
             const currentHeight = Math.max(0, blade.currentHeight + waveEffect);
 
-            // Цвет травинки (немного варьируется)
+            // Цвет травинки (используем сохраненный цвет)
             this.ctx.fillStyle = blade.color;
             this.ctx.strokeStyle = this.darkenColor(blade.color, 20);
             this.ctx.lineWidth = blade.width;
@@ -912,33 +904,55 @@ class GeometryDash {
             this.ctx.closePath();
             this.ctx.fill();
 
-            // Цветочки на некоторых травинках (случайно)
-            if (Math.random() > 0.7) {
-                this.ctx.fillStyle = ['#FF6B6B', '#FFD166', '#FF4081'][Math.floor(Math.random() * 3)];
+            // Цветочки на травинках (только если у травинки есть цветок)
+            if (blade.hasFlower && blade.flowerColor) {
+                this.ctx.fillStyle = blade.flowerColor;
                 this.ctx.beginPath();
                 this.ctx.arc(tipX, tipY - 5, 2, 0, Math.PI * 2);
                 this.ctx.fill();
+
+                // Добавляем лепестки для цветка
+                this.ctx.globalAlpha = 0.8;
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * Math.PI * 2) / 6;
+                    const petalX = tipX + Math.cos(angle) * 4;
+                    const petalY = tipY - 5 + Math.sin(angle) * 4;
+                    this.ctx.beginPath();
+                    this.ctx.arc(petalX, petalY, 1.5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                this.ctx.globalAlpha = 1;
             }
 
             this.ctx.restore();
         });
 
-        // Мелкие детали на земле (камушки, комочки земли)
+        // Мелкие детали на земле (камушки, комочки земли) - тоже фиксируем
         this.drawGroundDetails();
     }
 
     drawGroundDetails() {
-        // Рисуем мелкие детали на земле
-        for (let i = 0; i < 20; i++) {
-            const x = Math.random() * this.canvas.width;
-            const y = this.ground.y - 5 + Math.random() * 5;
-            const size = Math.random() * 3 + 1;
-
-            this.ctx.fillStyle = ['#795548', '#5D4037', '#4E342E'][Math.floor(Math.random() * 3)];
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, size, 0, Math.PI * 2);
-            this.ctx.fill();
+        // Детали земли должны быть фиксированными, а не случайными каждый кадр
+        if (!this.groundDetails) {
+            this.groundDetails = [];
+            for (let i = 0; i < 30; i++) {
+                this.groundDetails.push({
+                    x: Math.random() * this.canvas.width,
+                    y: this.ground.y - 5 + Math.random() * 5,
+                    size: Math.random() * 3 + 1,
+                    colorIndex: Math.floor(Math.random() * 3)
+                });
+            }
         }
+
+        // Рисуем сохраненные детали
+        const colors = ['#795548', '#5D4037', '#4E342E'];
+        this.groundDetails.forEach(detail => {
+            this.ctx.fillStyle = colors[detail.colorIndex];
+            this.ctx.beginPath();
+            this.ctx.arc(detail.x, detail.y, detail.size, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
     }
 
     drawNewPlayer() {
