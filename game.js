@@ -897,6 +897,34 @@ function initializeGame() {
         window.game = new GeometryDash();
     }
 }
+// Динамическое создание стилей для рта
+const mouthStyles = `
+.player-mouth {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.mouth-glow {
+    filter: drop-shadow(0 0 2px #FF6B6B);
+}
+
+@keyframes mouthSparkle {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+.mouth-sparkle {
+    animation: mouthSparkle 0.5s ease;
+}
+`;
+
+// Добавляем стили в DOM
+if (document.head) {
+    const styleEl = document.createElement('style');
+    styleEl.textContent = mouthStyles;
+    document.head.appendChild(styleEl);
+}
 
 // Запуск
 console.log('🎮 Geometry Dash Mobile Ultimate - Loading...');
