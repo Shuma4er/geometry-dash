@@ -260,16 +260,16 @@ class GeometryDash {
 
     createGrass() {
         this.grassBlades = [];
-        const grassCount = Math.floor(this.canvas.width / 10);
+        const grassCount = Math.floor(this.canvas.width / 8); // Больше травинок для плавного движения
 
         for (let i = 0; i < grassCount; i++) {
-            const hasFlower = Math.random() > 0.7;
+            const hasFlower = Math.random() > 0.9; // Реже цветы
             const flowerColor = hasFlower ?
                 ['#FF6B6B', '#FFD166', '#FF4081'][Math.floor(Math.random() * 3)] :
                 null;
 
             this.grassBlades.push({
-                x: i * 10 + Math.random() * 5,
+                x: i * 8 + Math.random() * 5,
                 baseHeight: Math.random() * 15 + 10,
                 currentHeight: 0,
                 waveOffset: Math.random() * Math.PI * 2,
@@ -277,7 +277,9 @@ class GeometryDash {
                 speed: Math.random() * 0.03 + 0.01,
                 color: this.getGrassColor(),
                 hasFlower: hasFlower,
-                flowerColor: flowerColor
+                flowerColor: flowerColor,
+                moveSpeed: Math.random() * 0.5 + 0.3, // Скорость движения травинки
+                baseX: i * 8 + Math.random() * 5 // Базовая позиция X для анимации
             });
         }
     }
@@ -598,7 +600,17 @@ class GeometryDash {
 
             blade.waveOffset += blade.speed;
 
-            const distanceToPlayer = Math.abs(this.player.x - blade.x * 10);
+            // Двигаем травинку вместе с препятствиями
+            blade.x -= blade.moveSpeed * 0.7; // Медленнее, чем препятствия
+
+            // Если травинка ушла за левую границу, перемещаем ее вправо
+            if (blade.x < -10) {
+                blade.x = this.canvas.width + 10;
+                // Сброс высоты для плавного появления
+                blade.currentHeight = 0;
+            }
+
+            const distanceToPlayer = Math.abs(this.player.x - blade.x);
             if (distanceToPlayer < 100 && this.player.isJumping) {
                 blade.waveOffset += 0.1;
             }
@@ -854,9 +866,14 @@ class GeometryDash {
     }
 
     drawGrass() {
+        // Основной слой травы (зеленая полоса) - тоже двигается
         this.ctx.fillStyle = '#4CAF50';
         this.ctx.fillRect(0, this.ground.y - 10, this.canvas.width, 10);
 
+        // Также двигаем детали земли
+        this.drawGroundDetails();
+
+        // Рисуем отдельные травинки
         this.grassBlades.forEach(blade => {
             this.ctx.save();
 
@@ -915,8 +932,6 @@ class GeometryDash {
 
             this.ctx.restore();
         });
-
-        this.drawGroundDetails();
     }
 
     drawGroundDetails() {
@@ -927,13 +942,23 @@ class GeometryDash {
                     x: Math.random() * this.canvas.width,
                     y: this.ground.y - 5 + Math.random() * 5,
                     size: Math.random() * 3 + 1,
-                    colorIndex: Math.floor(Math.random() * 3)
+                    colorIndex: Math.floor(Math.random() * 3),
+                    moveSpeed: Math.random() * 0.3 + 0.2
                 });
             }
         }
 
         const colors = ['#795548', '#5D4037', '#4E342E'];
         this.groundDetails.forEach(detail => {
+            // Двигаем детали земли
+            detail.x -= detail.moveSpeed * 0.6;
+
+            // Если деталь ушла за левую границу, перемещаем ее вправо
+            if (detail.x < -10) {
+                detail.x = this.canvas.width + 10;
+                detail.y = this.ground.y - 5 + Math.random() * 5;
+            }
+
             this.ctx.fillStyle = colors[detail.colorIndex];
             this.ctx.beginPath();
             this.ctx.arc(detail.x, detail.y, detail.size, 0, Math.PI * 2);
