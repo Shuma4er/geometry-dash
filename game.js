@@ -1,3 +1,21 @@
+// Добавляем поддержку roundRect для CanvasRenderingContext2D (если не поддерживается)
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, width, height, radius) {
+        if (width < 2 * radius) radius = width / 2;
+        if (height < 2 * radius) radius = height / 2;
+
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.arcTo(x + width, y, x + width, y + height, radius);
+        this.arcTo(x + width, y + height, x, y + height, radius);
+        this.arcTo(x, y + height, x, y, radius);
+        this.arcTo(x, y, x + width, y, radius);
+        this.closePath();
+
+        return this;
+    }
+}
+
 class GeometryDash {
     constructor() {
         console.log('🎮 GeometryDash constructor called');
@@ -146,8 +164,9 @@ class GeometryDash {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
             this.ground.y = this.canvas.height - 120;
-            this.createClouds(); // Пересоздаем облака при изменении размера
-            this.createGrass(); // Пересоздаем траву при изменении размера
+            this.createClouds();
+            this.createGrass();
+            this.groundDetails = null;
         });
     }
 
@@ -166,9 +185,9 @@ class GeometryDash {
             x: this.canvas.width - 80,
             y: 80,
             radius: 40,
-            baseY: 80, // Базовая позиция Y
-            waveOffset: 0, // Смещение для волны
-            speed: 0.02 // Скорость движения волны
+            baseY: 80,
+            waveOffset: 0,
+            speed: 0.02
         };
 
         // Массив для облаков
@@ -179,6 +198,9 @@ class GeometryDash {
         this.grassBlades = [];
         this.grassOffset = 0;
         this.createGrass();
+
+        // Детали земли (будут созданы при первом рисовании)
+        this.groundDetails = null;
 
         this.player = {
             x: 100,
@@ -191,10 +213,9 @@ class GeometryDash {
             scale: 1,
             color: '#FF6B6B',
             trail: [],
-            // Новые свойства для анимации рта
-            mouthState: 'normal', // normal, smiling, surprised, sad
+            mouthState: 'normal',
             mouthAnimationTimer: 0,
-            mouthOpenness: 0, // 0-1, где 0 закрыт, 1 полностью открыт
+            mouthOpenness: 0,
             mouthCycle: 0,
             isTalking: false,
             talkTimer: 0
@@ -221,12 +242,27 @@ class GeometryDash {
         this.currentTheme = 0;
     }
 
+    createClouds() {
+        this.clouds = [];
+        const cloudCount = Math.floor(this.canvas.width / 150) + 3;
+
+        for (let i = 0; i < cloudCount; i++) {
+            this.clouds.push({
+                x: Math.random() * this.canvas.width * 1.5,
+                y: Math.random() * 150 + 50,
+                width: Math.random() * 80 + 60,
+                height: Math.random() * 40 + 30,
+                speed: Math.random() * 0.5 + 0.2,
+                opacity: Math.random() * 0.4 + 0.3
+            });
+        }
+    }
+
     createGrass() {
         this.grassBlades = [];
-        const grassCount = Math.floor(this.canvas.width / 10); // Количество травинок
+        const grassCount = Math.floor(this.canvas.width / 10);
 
         for (let i = 0; i < grassCount; i++) {
-            // Решаем, будет ли у этой травинки цветок (один раз, а не каждый кадр)
             const hasFlower = Math.random() > 0.7;
             const flowerColor = hasFlower ?
                 ['#FF6B6B', '#FFD166', '#FF4081'][Math.floor(Math.random() * 3)] :
@@ -234,20 +270,19 @@ class GeometryDash {
 
             this.grassBlades.push({
                 x: i * 10 + Math.random() * 5,
-                baseHeight: Math.random() * 15 + 10, // Базовая высота травинки
+                baseHeight: Math.random() * 15 + 10,
                 currentHeight: 0,
-                waveOffset: Math.random() * Math.PI * 2, // Случайное смещение для волны
-                width: Math.random() * 1 + 0.5, // Толщина травинки
-                speed: Math.random() * 0.03 + 0.01, // Скорость колебания
-                color: this.getGrassColor(), // Цвет травинки
-                hasFlower: hasFlower, // Есть ли цветок (запоминаем, а не решаем каждый кадр)
-                flowerColor: flowerColor // Цвет цветка (если есть)
+                waveOffset: Math.random() * Math.PI * 2,
+                width: Math.random() * 1 + 0.5,
+                speed: Math.random() * 0.03 + 0.01,
+                color: this.getGrassColor(),
+                hasFlower: hasFlower,
+                flowerColor: flowerColor
             });
         }
     }
 
     getGrassColor() {
-        // Возвращает случайный зеленый цвет для травинки (один раз при создании)
         const greens = ['#4CAF50', '#66BB6A', '#81C784', '#43A047', '#388E3C'];
         return greens[Math.floor(Math.random() * greens.length)];
     }
@@ -431,17 +466,13 @@ class GeometryDash {
     update() {
         if (this.gameState !== 'playing') return;
 
-        // Обновление анимации рта
         this.updateMouthAnimation();
 
-        // Обновление движения солнца (плавное движение вверх-вниз)
         this.sun.waveOffset += this.sun.speed;
         this.sun.y = this.sun.baseY + Math.sin(this.sun.waveOffset) * 15;
 
-        // Обновление облаков
         this.updateClouds();
 
-        // Обновление травы
         this.updateGrass();
 
         this.player.velocityY += this.gravity;
@@ -500,7 +531,6 @@ class GeometryDash {
                     this.createTextEffect('COMBO x' + this.multiplier, obstacle.x, obstacle.y, '#FFD700');
                     this.playSound('powerup');
 
-                    // Анимация рта при комбо
                     this.player.mouthState = 'smiling';
                     this.player.mouthAnimationTimer = 15;
                 }
@@ -522,7 +552,6 @@ class GeometryDash {
                 this.createParticleEffect(collectible.x, collectible.y, 15, '#FFFF00');
                 this.playSound('score');
 
-                // Анимация рта при сборе монеты
                 this.player.mouthState = 'smiling';
                 this.player.mouthAnimationTimer = 20;
                 this.player.isTalking = true;
@@ -548,9 +577,8 @@ class GeometryDash {
     updateClouds() {
         for (let i = this.clouds.length - 1; i >= 0; i--) {
             const cloud = this.clouds[i];
-            cloud.x -= cloud.speed * 0.5; // Облака двигаются медленнее фона
+            cloud.x -= cloud.speed * 0.5;
 
-            // Если облако ушло за левую границу, перемещаем его вправо
             if (cloud.x + cloud.width < 0) {
                 cloud.x = this.canvas.width + Math.random() * 100;
                 cloud.y = Math.random() * 150 + 50;
@@ -559,21 +587,17 @@ class GeometryDash {
     }
 
     updateGrass() {
-        // Обновляем смещение для волнового эффекта травы
         this.grassOffset += 0.1;
 
         for (let i = 0; i < this.grassBlades.length; i++) {
             const blade = this.grassBlades[i];
 
-            // Плавное появление травинок
             if (blade.currentHeight < blade.baseHeight) {
                 blade.currentHeight += 0.5;
             }
 
-            // Колебание травинок (волновой эффект)
             blade.waveOffset += blade.speed;
 
-            // Если игрок прыгает рядом, усиливаем колебания
             const distanceToPlayer = Math.abs(this.player.x - blade.x * 10);
             if (distanceToPlayer < 100 && this.player.isJumping) {
                 blade.waveOffset += 0.1;
@@ -582,28 +606,22 @@ class GeometryDash {
     }
 
     updateMouthAnimation() {
-        // Обновление таймера анимации
         if (this.player.mouthAnimationTimer > 0) {
             this.player.mouthAnimationTimer--;
         } else if (this.player.mouthState !== 'normal') {
-            // Возврат к нормальному состоянию после анимации
             this.player.mouthState = 'normal';
         }
 
-        // Обновление таймера разговора
         if (this.player.talkTimer > 0) {
             this.player.talkTimer--;
         } else {
             this.player.isTalking = false;
         }
 
-        // Анимация открытия/закрытия рта
         if (this.player.isTalking) {
-            // Для разговора - быстрая анимация
             this.player.mouthCycle = (this.player.mouthCycle + 0.3) % Math.PI;
             this.player.mouthOpenness = Math.sin(this.player.mouthCycle) * 0.5 + 0.5;
         } else {
-            // Нормальное дыхание - медленная анимация
             this.player.mouthCycle = (this.player.mouthCycle + 0.05) % Math.PI;
             this.player.mouthOpenness = Math.sin(this.player.mouthCycle) * 0.2 + 0.2;
         }
@@ -682,24 +700,19 @@ class GeometryDash {
 
         const theme = this.colorThemes[this.currentTheme];
 
-        // ЯРКИЙ ФОН
         const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
         gradient.addColorStop(0, theme.bg);
         gradient.addColorStop(1, this.darkenColor(theme.bg, 20));
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // ОБЛАКА
         this.drawClouds();
 
-        // СОЛНЦЕ с анимацией
         this.drawSun();
 
-        // ЗЕМЛЯ
         this.ctx.fillStyle = '#81C784';
         this.ctx.fillRect(0, this.ground.y, this.canvas.width, this.ground.height);
 
-        // ТРАВА
         this.drawGrass();
 
         this.collectibles.forEach(collectible => {
@@ -719,7 +732,6 @@ class GeometryDash {
             this.ctx.restore();
         });
 
-        // ПРЕПЯТСТВИЯ
         this.obstacles.forEach(obstacle => {
             this.ctx.fillStyle = obstacle.color;
 
@@ -735,7 +747,6 @@ class GeometryDash {
             }
         });
 
-        // СЛЕД ИГРОКА
         this.ctx.strokeStyle = theme.primary;
         this.ctx.lineWidth = 3;
         this.ctx.globalAlpha = 0.6;
@@ -750,7 +761,6 @@ class GeometryDash {
         this.ctx.stroke();
         this.ctx.globalAlpha = 1;
 
-        // ИГРОК
         this.ctx.save();
         this.ctx.translate(
             this.player.x + this.player.width / 2,
@@ -759,12 +769,10 @@ class GeometryDash {
         this.ctx.rotate(this.player.rotation * Math.PI / 180);
         this.ctx.scale(this.player.scale, this.player.scale);
 
-        // НОВЫЙ ВИД ПЕРСОНАЖА (более округлый и мультяшный)
         this.drawNewPlayer();
 
         this.ctx.restore();
 
-        // ЧАСТИЦЫ
         this.particles.forEach(p => {
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;
@@ -774,7 +782,6 @@ class GeometryDash {
         });
         this.ctx.globalAlpha = 1;
 
-        // ТЕКСТОВЫЕ ЭФФЕКТЫ
         this.effects.forEach(effect => {
             this.ctx.globalAlpha = effect.life;
             this.ctx.fillStyle = effect.color;
@@ -793,15 +800,12 @@ class GeometryDash {
             this.ctx.globalAlpha = cloud.opacity;
             this.ctx.fillStyle = '#FFFFFF';
 
-            // Рисуем пушистое облако из нескольких кругов
             const centerX = cloud.x + cloud.width / 2;
             const centerY = cloud.y + cloud.height / 2;
 
-            // Основная часть облака
             this.ctx.beginPath();
             this.ctx.ellipse(centerX, centerY, cloud.width / 2, cloud.height / 2, 0, 0, Math.PI * 2);
 
-            // Добавляем пушистые части
             this.ctx.ellipse(centerX - cloud.width / 3, centerY - cloud.height / 4, cloud.width / 3, cloud.height / 3, 0, 0, Math.PI * 2);
             this.ctx.ellipse(centerX + cloud.width / 3, centerY - cloud.height / 4, cloud.width / 3, cloud.height / 3, 0, 0, Math.PI * 2);
             this.ctx.ellipse(centerX - cloud.width / 4, centerY + cloud.height / 4, cloud.width / 4, cloud.height / 4, 0, 0, Math.PI * 2);
@@ -815,7 +819,6 @@ class GeometryDash {
     drawSun() {
         this.ctx.save();
 
-        // Яркое свечение солнца
         const gradient = this.ctx.createRadialGradient(
             this.sun.x, this.sun.y, this.sun.radius,
             this.sun.x, this.sun.y, this.sun.radius * 2
@@ -829,22 +832,18 @@ class GeometryDash {
         this.ctx.arc(this.sun.x, this.sun.y, this.sun.radius * 2, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Само солнце
         this.ctx.fillStyle = '#FFEB3B';
         this.ctx.beginPath();
         this.ctx.arc(this.sun.x, this.sun.y, this.sun.radius, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Детали солнца (улыбка и глаза)
         this.ctx.fillStyle = '#FF9800';
 
-        // Глаза
         this.ctx.beginPath();
         this.ctx.arc(this.sun.x - 12, this.sun.y - 8, 4, 0, Math.PI * 2);
         this.ctx.arc(this.sun.x + 12, this.sun.y - 8, 4, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Улыбка
         this.ctx.beginPath();
         this.ctx.arc(this.sun.x, this.sun.y + 5, 15, 0.2, Math.PI - 0.2);
         this.ctx.lineWidth = 3;
@@ -855,32 +854,25 @@ class GeometryDash {
     }
 
     drawGrass() {
-        // Основной слой травы (зеленая полоса)
         this.ctx.fillStyle = '#4CAF50';
         this.ctx.fillRect(0, this.ground.y - 10, this.canvas.width, 10);
 
-        // Рисуем отдельные травинки
         this.grassBlades.forEach(blade => {
             this.ctx.save();
 
-            // Позиция травинки
             const x = blade.x;
             const baseY = this.ground.y - 10;
 
-            // Вычисляем высоту травинки с учетом волнового эффекта
             const waveEffect = Math.sin(blade.waveOffset + x * 0.01) * 2;
             const currentHeight = Math.max(0, blade.currentHeight + waveEffect);
 
-            // Цвет травинки (используем сохраненный цвет)
             this.ctx.fillStyle = blade.color;
             this.ctx.strokeStyle = this.darkenColor(blade.color, 20);
             this.ctx.lineWidth = blade.width;
 
-            // Рисуем травинку как изогнутую линию
             this.ctx.beginPath();
             this.ctx.moveTo(x, baseY);
 
-            // Плавная кривая для травинки
             const cp1x = x + Math.sin(blade.waveOffset) * 3;
             const cp1y = baseY - currentHeight * 0.3;
             const cp2x = x - Math.sin(blade.waveOffset + 0.5) * 2;
@@ -894,7 +886,6 @@ class GeometryDash {
 
             this.ctx.stroke();
 
-            // Верхушка травинки (маленький треугольник)
             this.ctx.beginPath();
             const tipX = x + Math.sin(blade.waveOffset) * 5;
             const tipY = baseY - currentHeight;
@@ -904,14 +895,12 @@ class GeometryDash {
             this.ctx.closePath();
             this.ctx.fill();
 
-            // Цветочки на травинках (только если у травинки есть цветок)
             if (blade.hasFlower && blade.flowerColor) {
                 this.ctx.fillStyle = blade.flowerColor;
                 this.ctx.beginPath();
                 this.ctx.arc(tipX, tipY - 5, 2, 0, Math.PI * 2);
                 this.ctx.fill();
 
-                // Добавляем лепестки для цветка
                 this.ctx.globalAlpha = 0.8;
                 for (let i = 0; i < 6; i++) {
                     const angle = (i * Math.PI * 2) / 6;
@@ -927,12 +916,10 @@ class GeometryDash {
             this.ctx.restore();
         });
 
-        // Мелкие детали на земле (камушки, комочки земли) - тоже фиксируем
         this.drawGroundDetails();
     }
 
     drawGroundDetails() {
-        // Детали земли должны быть фиксированными, а не случайными каждый кадр
         if (!this.groundDetails) {
             this.groundDetails = [];
             for (let i = 0; i < 30; i++) {
@@ -945,7 +932,6 @@ class GeometryDash {
             }
         }
 
-        // Рисуем сохраненные детали
         const colors = ['#795548', '#5D4037', '#4E342E'];
         this.groundDetails.forEach(detail => {
             this.ctx.fillStyle = colors[detail.colorIndex];
@@ -960,13 +946,11 @@ class GeometryDash {
         const width = this.player.width;
         const height = this.player.height;
 
-        // Тело персонажа (округлый квадрат)
         this.ctx.fillStyle = theme.primary;
         this.ctx.beginPath();
         this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
         this.ctx.fill();
 
-        // Тень для объема
         const shadowGradient = this.ctx.createLinearGradient(
             -width / 2, -height / 2,
             width / 2, height / 2
@@ -979,35 +963,30 @@ class GeometryDash {
         this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
         this.ctx.fill();
 
-        // Обводка
         this.ctx.strokeStyle = this.darkenColor(theme.primary, 30);
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
         this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
         this.ctx.stroke();
 
-        // ГЛАЗЫ
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.beginPath();
         this.ctx.arc(-width / 4, -height / 4, 6, 0, Math.PI * 2);
         this.ctx.arc(width / 4, -height / 4, 6, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Зрачки
         this.ctx.fillStyle = '#000000';
         this.ctx.beginPath();
         this.ctx.arc(-width / 4, -height / 4, 3, 0, Math.PI * 2);
         this.ctx.arc(width / 4, -height / 4, 3, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Блики в глазах
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.beginPath();
         this.ctx.arc(-width / 4 - 1, -height / 4 - 1, 1.5, 0, Math.PI * 2);
         this.ctx.arc(width / 4 - 1, -height / 4 - 1, 1.5, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // РОТ С АНИМАЦИЕЙ
         this.drawNewMouth();
     }
 
@@ -1018,51 +997,42 @@ class GeometryDash {
         let mouthCurve = 0;
         let isRound = false;
 
-        // Настройки рта в зависимости от состояния
         switch (this.player.mouthState) {
             case 'normal':
-                // Нормальный рот - улыбка
                 mouthHeight = 5 + (this.player.mouthOpenness * 2);
                 mouthCurve = 0.6;
                 break;
 
             case 'smiling':
-                // Широкая улыбка
                 mouthHeight = 6 + (this.player.mouthOpenness * 4);
                 mouthCurve = 1.8;
                 break;
 
             case 'surprised':
-                // Удивленный рот (круглый)
                 mouthHeight = 10 + (this.player.mouthOpenness * 6);
                 mouthCurve = 0;
                 isRound = true;
                 break;
 
             case 'sad':
-                // Грустный рот (перевернутая улыбка)
                 mouthHeight = 4 + (this.player.mouthOpenness * 2);
                 mouthCurve = -0.8;
                 break;
         }
 
-        // Если рот полностью открыт в режиме разговора
         if (this.player.isTalking && this.player.mouthOpenness > 0.8) {
             mouthHeight = 12;
             mouthCurve = 0;
             isRound = true;
         }
 
-        // Рисуем рот
         this.ctx.fillStyle = '#000000';
 
         if (isRound) {
-            // Круглый рот
             this.ctx.beginPath();
             this.ctx.ellipse(0, mouthY, mouthWidth / 2, mouthHeight / 2, 0, 0, Math.PI * 2);
             this.ctx.fill();
 
-            // Язык для разговора
             if (this.player.isTalking) {
                 this.ctx.fillStyle = '#FF6B6B';
                 this.ctx.beginPath();
@@ -1070,15 +1040,12 @@ class GeometryDash {
                 this.ctx.fill();
             }
         } else {
-            // Изогнутый рот
             this.ctx.beginPath();
 
             if (mouthCurve > 0) {
-                // Улыбка
                 this.ctx.ellipse(0, mouthY + mouthHeight / 3, mouthWidth / 2, mouthHeight / 2,
                     0, Math.PI * 0.1, Math.PI * 0.9);
             } else {
-                // Грусть (перевернутая улыбка)
                 this.ctx.ellipse(0, mouthY - mouthHeight / 3, mouthWidth / 2, mouthHeight / 2,
                     0, Math.PI * 1.1, Math.PI * 1.9);
             }
@@ -1086,7 +1053,6 @@ class GeometryDash {
             this.ctx.lineWidth = 3;
             this.ctx.stroke();
 
-            // Язык для широкой улыбки
             if (mouthCurve > 1 && this.player.mouthOpenness > 0.7) {
                 this.ctx.fillStyle = '#FF6B6B';
                 this.ctx.beginPath();
@@ -1095,7 +1061,6 @@ class GeometryDash {
             }
         }
 
-        // Добавляем блик на рот
         this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
         this.ctx.beginPath();
         if (isRound) {
@@ -1134,7 +1099,6 @@ class GeometryDash {
     gameOver() {
         this.gameState = 'gameover';
 
-        // Перед gameover устанавливаем грустный рот
         this.player.mouthState = 'sad';
         this.player.mouthAnimationTimer = 30;
 
@@ -1205,24 +1169,6 @@ class GeometryDash {
         if (this.gameState === 'playing') {
             requestAnimationFrame(() => this.gameLoop());
         }
-    }
-}
-
-// Добавляем поддержку roundRect для CanvasRenderingContext2D (если не поддерживается)
-if (!CanvasRenderingContext2D.prototype.roundRect) {
-    CanvasRenderingContext2D.prototype.roundRect = function (x, y, width, height, radius) {
-        if (width < 2 * radius) radius = width / 2;
-        if (height < 2 * radius) radius = height / 2;
-
-        this.beginPath();
-        this.moveTo(x + radius, y);
-        this.arcTo(x + width, y, x + width, y + height, radius);
-        this.arcTo(x + width, y + height, x, y + height, radius);
-        this.arcTo(x, y + height, x, y, radius);
-        this.arcTo(x, y, x + width, y, radius);
-        this.closePath();
-
-        return this;
     }
 }
 
