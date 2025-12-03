@@ -200,6 +200,182 @@ class GeometryDash {
         this.currentTheme = 0;
     }
 
+    setupEventListeners() {
+        console.log('🔧 Setting up event listeners...');
+
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) {
+            startBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.startGame();
+            });
+
+            startBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.startGame();
+            }, { passive: false });
+        }
+
+        const restartBtn = document.getElementById('restartBtn');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => this.restartGame());
+        }
+
+        const shareBtn = document.getElementById('shareBtn');
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => this.shareScore());
+        }
+
+        this.setupCanvasControls();
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                this.jump();
+            }
+        });
+
+        if (window.Telegram && Telegram.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+
+        console.log('✅ All event listeners setup complete');
+    }
+
+    setupCanvasControls() {
+        const handleJump = (e) => {
+            if (e.type === 'touchstart') {
+                e.preventDefault();
+            }
+
+            if (this.gameState === 'playing') {
+                this.jump();
+
+                if (this.isMobile) {
+                    this.createTapEffect(e);
+                }
+            }
+
+            if (this.gameState === 'menu') {
+                this.startGame();
+            }
+        };
+
+        this.canvas.addEventListener('click', handleJump);
+        this.canvas.addEventListener('touchstart', handleJump, { passive: false });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                handleJump(e);
+            }
+        });
+    }
+
+    createTapEffect(e) {
+        let x, y;
+        if (e.touches && e.touches[0]) {
+            x = e.touches[0].clientX;
+            y = e.touches[0].clientY;
+        } else {
+            x = e.clientX;
+            y = e.clientY;
+        }
+
+        const effect = document.createElement('div');
+        effect.style.position = 'fixed';
+        effect.style.left = (x - 25) + 'px';
+        effect.style.top = (y - 25) + 'px';
+        effect.style.width = '50px';
+        effect.style.height = '50px';
+        effect.style.borderRadius = '50%';
+        effect.style.backgroundColor = 'rgba(255, 107, 107, 0.3)';
+        effect.style.border = '2px solid rgba(255, 107, 107, 0.5)';
+        effect.style.zIndex = '9998';
+        effect.style.pointerEvents = 'none';
+        effect.style.animation = 'tapEffect 0.5s forwards';
+
+        document.body.appendChild(effect);
+
+        setTimeout(() => {
+            document.body.removeChild(effect);
+        }, 500);
+    }
+
+    setupSwipeControls() {
+        let startX, startY;
+
+        this.canvas.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+
+        this.canvas.addEventListener('touchend', (e) => {
+            if (!startX || !startY) return;
+
+            const endX = e.changedTouches[0].clientX;
+            const endY = e.changedTouches[0].clientY;
+
+            const diffX = endX - startX;
+            const diffY = endY - startY;
+
+            if (Math.abs(diffY) > Math.abs(diffX) && diffY < -30) {
+                this.jump();
+            }
+
+            startX = startY = null;
+        }, { passive: true });
+    }
+
+    startGame() {
+        console.log('🎮 START GAME');
+
+        this.gameState = 'playing';
+
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const menu = document.getElementById('menu');
+        const gameContainer = document.getElementById('gameContainer');
+
+        if (startScreen) startScreen.classList.add('hidden');
+        if (gameOverScreen) gameOverScreen.classList.add('hidden');
+        if (menu) menu.classList.add('hidden');
+
+        if (gameContainer) {
+            gameContainer.classList.add('playing');
+        }
+
+        this.createParticleEffect(this.player.x, this.player.y, 20, this.player.color);
+        this.playSound('powerup');
+        this.gameLoop();
+    }
+
+    createParticleEffect(x, y, count, color) {
+        for (let i = 0; i < count; i++) {
+            this.particles.push({
+                x: x,
+                y: y,
+                size: Math.random() * 4 + 2,
+                speedX: (Math.random() - 0.5) * 8,
+                speedY: (Math.random() - 0.5) * 8,
+                color: color,
+                life: 1,
+                decay: Math.random() * 0.02 + 0.01
+            });
+        }
+    }
+
+    createTextEffect(text, x, y, color) {
+        this.effects.push({
+            text: text,
+            x: x,
+            y: y,
+            color: color,
+            life: 1
+        });
+    }
+
     update() {
         if (this.gameState !== 'playing') return;
 
@@ -335,6 +511,70 @@ class GeometryDash {
         }
     }
 
+    createCollectible() {
+        this.collectibles.push({
+            x: this.canvas.width,
+            y: this.ground.y - 80,
+            width: 20,
+            height: 20,
+            color: '#FFFF00',
+            rotation: 0,
+            type: 'coin'
+        });
+    }
+
+    updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.life -= p.decay;
+
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+    }
+
+    updateEffects() {
+        for (let i = this.effects.length - 1; i >= 0; i--) {
+            const effect = this.effects[i];
+            effect.life -= 0.02;
+            effect.y -= 2;
+
+            if (effect.life <= 0) {
+                this.effects.splice(i, 1);
+            }
+        }
+    }
+
+    createObstacle() {
+        const types = [
+            { width: 35, height: 60, type: 'spike' },
+            { width: 35, height: 90, type: 'spike' },
+            { width: 80, height: 40, type: 'platform' }
+        ];
+
+        const type = types[Math.floor(Math.random() * types.length)];
+        const theme = this.colorThemes[this.currentTheme];
+
+        this.obstacles.push({
+            x: this.canvas.width,
+            y: type.type === 'platform' ? this.ground.y - type.height : this.ground.y - type.height,
+            width: type.width,
+            height: type.height,
+            color: theme.secondary,
+            type: type.type
+        });
+    }
+
+    checkCollision(player, object) {
+        return player.x < object.x + object.width &&
+            player.x + player.width > object.x &&
+            player.y < object.y + object.height &&
+            player.y + player.height > object.y;
+    }
+
     draw() {
         const shakeX = this.screenShake * (Math.random() - 0.5) * 10;
         const shakeY = this.screenShake * (Math.random() - 0.5) * 10;
@@ -441,7 +681,7 @@ class GeometryDash {
         this.ctx.fillRect(-this.player.width / 4 + 2, -this.player.height / 4 + 2, 4, 4);
         this.ctx.fillRect(this.player.width / 4 - 6, -this.player.height / 4 + 2, 4, 4);
 
-        // РОТ
+        // РОТ С АНИМАЦИЕЙ
         this.drawMouth();
 
         this.ctx.restore();
@@ -554,6 +794,20 @@ class GeometryDash {
             (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
     }
 
+    updateScore() {
+        if (this.scoreElement) {
+            this.scoreElement.textContent = `⭐ Очки: ${this.score}`;
+        }
+
+        if (this.score > this.highScore) {
+            this.highScore = this.score;
+            if (this.highScoreElement) {
+                this.highScoreElement.textContent = `🏆 Рекорд: ${this.highScore}`;
+            }
+            localStorage.setItem('geometryDashHighScore', this.highScore);
+        }
+    }
+
     gameOver() {
         this.gameState = 'gameover';
 
@@ -579,7 +833,56 @@ class GeometryDash {
         this.sendScoreToBot();
     }
 
-    // ... остальные методы остаются без изменений ...
+    restartGame() {
+        const gameContainer = document.getElementById('gameContainer');
+        if (gameContainer) {
+            gameContainer.classList.add('playing');
+        }
+
+        const menu = document.getElementById('menu');
+        if (menu) {
+            menu.classList.add('hidden');
+        }
+
+        this.currentTheme = (this.currentTheme + 1) % this.colorThemes.length;
+        this.initGame();
+        this.startGame();
+    }
+
+    shareScore() {
+        const shareText = `🎮 Я набрал ${this.score} очков в Geometry Dash Ultimate!`;
+        if (navigator.share) {
+            navigator.share({
+                title: 'Geometry Dash Ultimate',
+                text: shareText
+            });
+        } else {
+            alert(shareText);
+        }
+    }
+
+    sendScoreToBot() {
+        try {
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.sendData(JSON.stringify({
+                    action: 'game_score',
+                    score: this.score,
+                    highScore: this.highScore
+                }));
+            }
+        } catch (e) {
+            console.log('Cannot send data to bot:', e);
+        }
+    }
+
+    gameLoop() {
+        this.update();
+        this.draw();
+
+        if (this.gameState === 'playing') {
+            requestAnimationFrame(() => this.gameLoop());
+        }
+    }
 }
 
 // Инициализация
