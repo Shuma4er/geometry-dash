@@ -511,3 +511,45 @@ h2 {
         }
     }
 }
+
+/* Добавьте в существующий CSS */
+
+/* Поддержка roundRect для старых браузеров */
+canvas {
+    border-radius: 0 !important;
+}
+
+/* Анимация для облаков */
+@keyframes cloudFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.cloud {
+    animation: cloudFloat 6s infinite ease-in-out;
+}
+
+/* Анимация для солнца */
+@keyframes sunFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+}
+
+.sun {
+    animation: sunFloat 4s infinite ease-in-out;
+}
+
+/* Дополнительные эффекты для персонажа */
+@keyframes playerBounce {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.player-bounce {
+    animation: playerBounce 2s infinite;
+}
+
+/* Эффект тени для персонажа */
+.player-shadow {
+    filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.3));
+}

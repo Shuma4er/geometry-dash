@@ -146,6 +146,7 @@ class GeometryDash {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
             this.ground.y = this.canvas.height - 120;
+            this.createClouds(); // Пересоздаем облака при изменении размера
         });
     }
 
@@ -159,11 +160,25 @@ class GeometryDash {
         this.multiplier = 1;
         this.screenShake = 0;
 
+        // Параметры для солнца
+        this.sun = {
+            x: this.canvas.width - 80,
+            y: 80,
+            radius: 40,
+            baseY: 80, // Базовая позиция Y
+            waveOffset: 0, // Смещение для волны
+            speed: 0.02 // Скорость движения волны
+        };
+
+        // Массив для облаков
+        this.clouds = [];
+        this.createClouds();
+
         this.player = {
             x: 100,
             y: this.canvas.height - 180,
-            width: 45,
-            height: 45,
+            width: 50,
+            height: 50,
             velocityY: 0,
             isJumping: false,
             rotation: 0,
@@ -198,6 +213,22 @@ class GeometryDash {
             { primary: '#6B83FF', secondary: '#FF6BE8', bg: '#fbc2eb' }
         ];
         this.currentTheme = 0;
+    }
+
+    createClouds() {
+        this.clouds = [];
+        const cloudCount = Math.floor(this.canvas.width / 150) + 3; // Количество облаков в зависимости от ширины
+
+        for (let i = 0; i < cloudCount; i++) {
+            this.clouds.push({
+                x: Math.random() * this.canvas.width * 1.5,
+                y: Math.random() * 150 + 50,
+                width: Math.random() * 80 + 60,
+                height: Math.random() * 40 + 30,
+                speed: Math.random() * 0.5 + 0.2,
+                opacity: Math.random() * 0.4 + 0.3
+            });
+        }
     }
 
     setupEventListeners() {
@@ -382,6 +413,13 @@ class GeometryDash {
         // Обновление анимации рта
         this.updateMouthAnimation();
 
+        // Обновление движения солнца (плавное движение вверх-вниз)
+        this.sun.waveOffset += this.sun.speed;
+        this.sun.y = this.sun.baseY + Math.sin(this.sun.waveOffset) * 15;
+
+        // Обновление облаков
+        this.updateClouds();
+
         this.player.velocityY += this.gravity;
         this.player.y += this.player.velocityY;
 
@@ -480,6 +518,19 @@ class GeometryDash {
         if (this.screenShake > 0) {
             this.screenShake *= 0.9;
             if (this.screenShake < 0.1) this.screenShake = 0;
+        }
+    }
+
+    updateClouds() {
+        for (let i = this.clouds.length - 1; i >= 0; i--) {
+            const cloud = this.clouds[i];
+            cloud.x -= cloud.speed * 0.5; // Облака двигаются медленнее фона
+
+            // Если облако ушло за левую границу, перемещаем его вправо
+            if (cloud.x + cloud.width < 0) {
+                cloud.x = this.canvas.width + Math.random() * 100;
+                cloud.y = Math.random() * 150 + 50;
+            }
         }
     }
 
@@ -591,11 +642,11 @@ class GeometryDash {
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // СОЛНЦЕ
-        this.ctx.fillStyle = '#FFEB3B';
-        this.ctx.beginPath();
-        this.ctx.arc(this.canvas.width - 80, 80, 40, 0, Math.PI * 2);
-        this.ctx.fill();
+        // ОБЛАКА
+        this.drawClouds();
+
+        // СОЛНЦЕ с анимацией
+        this.drawSun();
 
         // ЗЕМЛЯ
         this.ctx.fillStyle = '#81C784';
@@ -662,27 +713,8 @@ class GeometryDash {
         this.ctx.rotate(this.player.rotation * Math.PI / 180);
         this.ctx.scale(this.player.scale, this.player.scale);
 
-        const playerGradient = this.ctx.createLinearGradient(
-            -this.player.width / 2, -this.player.height / 2,
-            this.player.width / 2, this.player.height / 2
-        );
-        playerGradient.addColorStop(0, theme.primary);
-        playerGradient.addColorStop(1, this.darkenColor(theme.primary, 20));
-
-        this.ctx.fillStyle = playerGradient;
-        this.ctx.fillRect(-this.player.width / 2, -this.player.height / 2, this.player.width, this.player.height);
-
-        // ГЛАЗА
-        this.ctx.fillStyle = '#FFFFFF';
-        this.ctx.fillRect(-this.player.width / 4, -this.player.height / 4, 8, 8);
-        this.ctx.fillRect(this.player.width / 4 - 8, -this.player.height / 4, 8, 8);
-
-        this.ctx.fillStyle = '#000000';
-        this.ctx.fillRect(-this.player.width / 4 + 2, -this.player.height / 4 + 2, 4, 4);
-        this.ctx.fillRect(this.player.width / 4 - 6, -this.player.height / 4 + 2, 4, 4);
-
-        // РОТ С АНИМАЦИЕЙ
-        this.drawMouth();
+        // НОВЫЙ ВИД ПЕРСОНАЖА (более округлый и мультяшный)
+        this.drawNewPlayer();
 
         this.ctx.restore();
 
@@ -709,78 +741,222 @@ class GeometryDash {
         this.ctx.restore();
     }
 
-    drawMouth() {
-        const mouthY = this.player.height / 8; // Позиция рта относительно центра
-        const mouthWidth = 20;
-        let mouthHeight = 5;
+    drawClouds() {
+        this.clouds.forEach(cloud => {
+            this.ctx.save();
+            this.ctx.globalAlpha = cloud.opacity;
+            this.ctx.fillStyle = '#FFFFFF';
+
+            // Рисуем пушистое облако из нескольких кругов
+            const centerX = cloud.x + cloud.width / 2;
+            const centerY = cloud.y + cloud.height / 2;
+
+            // Основная часть облака
+            this.ctx.beginPath();
+            this.ctx.ellipse(centerX, centerY, cloud.width / 2, cloud.height / 2, 0, 0, Math.PI * 2);
+
+            // Добавляем пушистые части
+            this.ctx.ellipse(centerX - cloud.width / 3, centerY - cloud.height / 4, cloud.width / 3, cloud.height / 3, 0, 0, Math.PI * 2);
+            this.ctx.ellipse(centerX + cloud.width / 3, centerY - cloud.height / 4, cloud.width / 3, cloud.height / 3, 0, 0, Math.PI * 2);
+            this.ctx.ellipse(centerX - cloud.width / 4, centerY + cloud.height / 4, cloud.width / 4, cloud.height / 4, 0, 0, Math.PI * 2);
+            this.ctx.ellipse(centerX + cloud.width / 4, centerY + cloud.height / 4, cloud.width / 4, cloud.height / 4, 0, 0, Math.PI * 2);
+
+            this.ctx.fill();
+            this.ctx.restore();
+        });
+    }
+
+    drawSun() {
+        this.ctx.save();
+
+        // Яркое свечение солнца
+        const gradient = this.ctx.createRadialGradient(
+            this.sun.x, this.sun.y, this.sun.radius,
+            this.sun.x, this.sun.y, this.sun.radius * 2
+        );
+        gradient.addColorStop(0, '#FFEB3B');
+        gradient.addColorStop(0.7, '#FFC107');
+        gradient.addColorStop(1, 'rgba(255, 193, 7, 0)');
+
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(this.sun.x, this.sun.y, this.sun.radius * 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Само солнце
+        this.ctx.fillStyle = '#FFEB3B';
+        this.ctx.beginPath();
+        this.ctx.arc(this.sun.x, this.sun.y, this.sun.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Детали солнца (улыбка и глаза)
+        this.ctx.fillStyle = '#FF9800';
+
+        // Глаза
+        this.ctx.beginPath();
+        this.ctx.arc(this.sun.x - 12, this.sun.y - 8, 4, 0, Math.PI * 2);
+        this.ctx.arc(this.sun.x + 12, this.sun.y - 8, 4, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Улыбка
+        this.ctx.beginPath();
+        this.ctx.arc(this.sun.x, this.sun.y + 5, 15, 0.2, Math.PI - 0.2);
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeStyle = '#FF9800';
+        this.ctx.stroke();
+
+        this.ctx.restore();
+    }
+
+    drawNewPlayer() {
+        const theme = this.colorThemes[this.currentTheme];
+        const width = this.player.width;
+        const height = this.player.height;
+
+        // Тело персонажа (округлый квадрат)
+        this.ctx.fillStyle = theme.primary;
+        this.ctx.beginPath();
+        this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
+        this.ctx.fill();
+
+        // Тень для объема
+        const shadowGradient = this.ctx.createLinearGradient(
+            -width / 2, -height / 2,
+            width / 2, height / 2
+        );
+        shadowGradient.addColorStop(0, 'rgba(255,255,255,0.2)');
+        shadowGradient.addColorStop(1, 'rgba(0,0,0,0.1)');
+
+        this.ctx.fillStyle = shadowGradient;
+        this.ctx.beginPath();
+        this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
+        this.ctx.fill();
+
+        // Обводка
+        this.ctx.strokeStyle = this.darkenColor(theme.primary, 30);
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
+        this.ctx.stroke();
+
+        // ГЛАЗА
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.beginPath();
+        this.ctx.arc(-width / 4, -height / 4, 6, 0, Math.PI * 2);
+        this.ctx.arc(width / 4, -height / 4, 6, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Зрачки
+        this.ctx.fillStyle = '#000000';
+        this.ctx.beginPath();
+        this.ctx.arc(-width / 4, -height / 4, 3, 0, Math.PI * 2);
+        this.ctx.arc(width / 4, -height / 4, 3, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Блики в глазах
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.beginPath();
+        this.ctx.arc(-width / 4 - 1, -height / 4 - 1, 1.5, 0, Math.PI * 2);
+        this.ctx.arc(width / 4 - 1, -height / 4 - 1, 1.5, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // РОТ С АНИМАЦИЕЙ
+        this.drawNewMouth();
+    }
+
+    drawNewMouth() {
+        const mouthY = this.player.height / 8;
+        const mouthWidth = 22;
+        let mouthHeight = 6;
         let mouthCurve = 0;
+        let isRound = false;
 
         // Настройки рта в зависимости от состояния
         switch (this.player.mouthState) {
             case 'normal':
                 // Нормальный рот - улыбка
-                mouthHeight = 3 + (this.player.mouthOpenness * 2);
-                mouthCurve = 0.5;
+                mouthHeight = 5 + (this.player.mouthOpenness * 2);
+                mouthCurve = 0.6;
                 break;
 
             case 'smiling':
                 // Широкая улыбка
-                mouthHeight = 4 + (this.player.mouthOpenness * 3);
-                mouthCurve = 1.5;
+                mouthHeight = 6 + (this.player.mouthOpenness * 4);
+                mouthCurve = 1.8;
                 break;
 
             case 'surprised':
                 // Удивленный рот (круглый)
-                mouthHeight = 8 + (this.player.mouthOpenness * 4);
+                mouthHeight = 10 + (this.player.mouthOpenness * 6);
                 mouthCurve = 0;
+                isRound = true;
                 break;
 
             case 'sad':
                 // Грустный рот (перевернутая улыбка)
-                mouthHeight = 3 + (this.player.mouthOpenness * 2);
-                mouthCurve = -0.5;
+                mouthHeight = 4 + (this.player.mouthOpenness * 2);
+                mouthCurve = -0.8;
                 break;
         }
 
         // Если рот полностью открыт в режиме разговора
         if (this.player.isTalking && this.player.mouthOpenness > 0.8) {
-            mouthHeight = 8;
+            mouthHeight = 12;
             mouthCurve = 0;
+            isRound = true;
         }
 
         // Рисуем рот
         this.ctx.fillStyle = '#000000';
 
-        if (mouthCurve === 0) {
-            // Круглый рот (для удивления)
+        if (isRound) {
+            // Круглый рот
             this.ctx.beginPath();
             this.ctx.ellipse(0, mouthY, mouthWidth / 2, mouthHeight / 2, 0, 0, Math.PI * 2);
             this.ctx.fill();
+
+            // Язык для разговора
+            if (this.player.isTalking) {
+                this.ctx.fillStyle = '#FF6B6B';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, mouthY + mouthHeight / 3, 5, 4, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         } else {
-            // Изогнутый рот (улыбка или грусть)
+            // Изогнутый рот
             this.ctx.beginPath();
 
             if (mouthCurve > 0) {
                 // Улыбка
-                this.ctx.ellipse(0, mouthY + mouthHeight / 4, mouthWidth / 2, mouthHeight / 2,
+                this.ctx.ellipse(0, mouthY + mouthHeight / 3, mouthWidth / 2, mouthHeight / 2,
                     0, Math.PI * 0.1, Math.PI * 0.9);
             } else {
                 // Грусть (перевернутая улыбка)
-                this.ctx.ellipse(0, mouthY - mouthHeight / 4, mouthWidth / 2, mouthHeight / 2,
+                this.ctx.ellipse(0, mouthY - mouthHeight / 3, mouthWidth / 2, mouthHeight / 2,
                     0, Math.PI * 1.1, Math.PI * 1.9);
             }
 
-            this.ctx.lineWidth = 2;
+            this.ctx.lineWidth = 3;
             this.ctx.stroke();
+
+            // Язык для широкой улыбки
+            if (mouthCurve > 1 && this.player.mouthOpenness > 0.7) {
+                this.ctx.fillStyle = '#FF6B6B';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, mouthY + mouthHeight / 1.5, 6, 5, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
 
-        // Язык (если рот открыт достаточно широко)
-        if (this.player.mouthOpenness > 0.7 && (this.player.mouthState === 'smiling' || this.player.isTalking)) {
-            this.ctx.fillStyle = '#FF6B6B';
-            this.ctx.beginPath();
-            this.ctx.ellipse(0, mouthY + mouthHeight / 2, 4, 3, 0, 0, Math.PI * 2);
-            this.ctx.fill();
+        // Добавляем блик на рот
+        this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        this.ctx.beginPath();
+        if (isRound) {
+            this.ctx.ellipse(-mouthWidth / 4, mouthY - mouthHeight / 4, 3, 2, 0, 0, Math.PI * 2);
+        } else if (mouthCurve > 0) {
+            this.ctx.ellipse(-mouthWidth / 3, mouthY + mouthHeight / 4, 4, 2, 0, 0, Math.PI * 2);
         }
+        this.ctx.fill();
     }
 
     darkenColor(color, percent) {
@@ -897,33 +1073,22 @@ function initializeGame() {
         window.game = new GeometryDash();
     }
 }
-// Динамическое создание стилей для рта
-const mouthStyles = `
-.player-mouth {
-    position: absolute;
-    z-index: 10;
-    pointer-events: none;
-}
 
-.mouth-glow {
-    filter: drop-shadow(0 0 2px #FF6B6B);
-}
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, width, height, radius) {
+        if (width < 2 * radius) radius = width / 2;
+        if (height < 2 * radius) radius = height / 2;
 
-@keyframes mouthSparkle {
-    0%, 100% { opacity: 0.7; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.1); }
-}
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.arcTo(x + width, y, x + width, y + height, radius);
+        this.arcTo(x + width, y + height, x, y + height, radius);
+        this.arcTo(x, y + height, x, y, radius);
+        this.arcTo(x, y, x + width, y, radius);
+        this.closePath();
 
-.mouth-sparkle {
-    animation: mouthSparkle 0.5s ease;
-}
-`;
-
-// Добавляем стили в DOM
-if (document.head) {
-    const styleEl = document.createElement('style');
-    styleEl.textContent = mouthStyles;
-    document.head.appendChild(styleEl);
+        return this;
+    }
 }
 
 // Запуск
