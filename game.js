@@ -147,6 +147,7 @@ class GeometryDash {
             this.canvas.height = window.innerHeight;
             this.ground.y = this.canvas.height - 120;
             this.createClouds(); // Пересоздаем облака при изменении размера
+            this.createGrass(); // Пересоздаем траву при изменении размера
         });
     }
 
@@ -173,6 +174,11 @@ class GeometryDash {
         // Массив для облаков
         this.clouds = [];
         this.createClouds();
+
+        // Массив для травинок
+        this.grassBlades = [];
+        this.grassOffset = 0;
+        this.createGrass();
 
         this.player = {
             x: 100,
@@ -229,6 +235,29 @@ class GeometryDash {
                 opacity: Math.random() * 0.4 + 0.3
             });
         }
+    }
+
+    createGrass() {
+        this.grassBlades = [];
+        const grassCount = Math.floor(this.canvas.width / 10); // Количество травинок
+
+        for (let i = 0; i < grassCount; i++) {
+            this.grassBlades.push({
+                x: i * 10 + Math.random() * 5,
+                baseHeight: Math.random() * 15 + 10, // Базовая высота травинки
+                currentHeight: 0,
+                waveOffset: Math.random() * Math.PI * 2, // Случайное смещение для волны
+                width: Math.random() * 1 + 0.5, // Толщина травинки
+                speed: Math.random() * 0.03 + 0.01, // Скорость колебания
+                color: this.getGrassColor() // Цвет травинки
+            });
+        }
+    }
+
+    getGrassColor() {
+        // Возвращает случайный зеленый цвет для травинки
+        const greens = ['#4CAF50', '#66BB6A', '#81C784', '#43A047', '#388E3C'];
+        return greens[Math.floor(Math.random() * greens.length)];
     }
 
     setupEventListeners() {
@@ -420,6 +449,9 @@ class GeometryDash {
         // Обновление облаков
         this.updateClouds();
 
+        // Обновление травы
+        this.updateGrass();
+
         this.player.velocityY += this.gravity;
         this.player.y += this.player.velocityY;
 
@@ -530,6 +562,29 @@ class GeometryDash {
             if (cloud.x + cloud.width < 0) {
                 cloud.x = this.canvas.width + Math.random() * 100;
                 cloud.y = Math.random() * 150 + 50;
+            }
+        }
+    }
+
+    updateGrass() {
+        // Обновляем смещение для волнового эффекта травы
+        this.grassOffset += 0.1;
+
+        for (let i = 0; i < this.grassBlades.length; i++) {
+            const blade = this.grassBlades[i];
+
+            // Плавное появление травинок
+            if (blade.currentHeight < blade.baseHeight) {
+                blade.currentHeight += 0.5;
+            }
+
+            // Колебание травинок (волновой эффект)
+            blade.waveOffset += blade.speed;
+
+            // Если игрок прыгает рядом, усиливаем колебания
+            const distanceToPlayer = Math.abs(this.player.x - blade.x * 10);
+            if (distanceToPlayer < 100 && this.player.isJumping) {
+                blade.waveOffset += 0.1;
             }
         }
     }
@@ -653,8 +708,7 @@ class GeometryDash {
         this.ctx.fillRect(0, this.ground.y, this.canvas.width, this.ground.height);
 
         // ТРАВА
-        this.ctx.fillStyle = '#4CAF50';
-        this.ctx.fillRect(0, this.ground.y - 10, this.canvas.width, 10);
+        this.drawGrass();
 
         this.collectibles.forEach(collectible => {
             this.ctx.save();
@@ -808,6 +862,85 @@ class GeometryDash {
         this.ctx.restore();
     }
 
+    drawGrass() {
+        // Основной слой травы (зеленая полоса)
+        this.ctx.fillStyle = '#4CAF50';
+        this.ctx.fillRect(0, this.ground.y - 10, this.canvas.width, 10);
+
+        // Рисуем отдельные травинки
+        this.grassBlades.forEach(blade => {
+            this.ctx.save();
+
+            // Позиция травинки
+            const x = blade.x;
+            const baseY = this.ground.y - 10;
+
+            // Вычисляем высоту травинки с учетом волнового эффекта
+            const waveEffect = Math.sin(blade.waveOffset + x * 0.01) * 2;
+            const currentHeight = Math.max(0, blade.currentHeight + waveEffect);
+
+            // Цвет травинки (немного варьируется)
+            this.ctx.fillStyle = blade.color;
+            this.ctx.strokeStyle = this.darkenColor(blade.color, 20);
+            this.ctx.lineWidth = blade.width;
+
+            // Рисуем травинку как изогнутую линию
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, baseY);
+
+            // Плавная кривая для травинки
+            const cp1x = x + Math.sin(blade.waveOffset) * 3;
+            const cp1y = baseY - currentHeight * 0.3;
+            const cp2x = x - Math.sin(blade.waveOffset + 0.5) * 2;
+            const cp2y = baseY - currentHeight * 0.7;
+
+            this.ctx.bezierCurveTo(
+                cp1x, cp1y,
+                cp2x, cp2y,
+                x + Math.sin(blade.waveOffset) * 5, baseY - currentHeight
+            );
+
+            this.ctx.stroke();
+
+            // Верхушка травинки (маленький треугольник)
+            this.ctx.beginPath();
+            const tipX = x + Math.sin(blade.waveOffset) * 5;
+            const tipY = baseY - currentHeight;
+            this.ctx.moveTo(tipX, tipY);
+            this.ctx.lineTo(tipX - 2, tipY - 3);
+            this.ctx.lineTo(tipX + 2, tipY - 3);
+            this.ctx.closePath();
+            this.ctx.fill();
+
+            // Цветочки на некоторых травинках (случайно)
+            if (Math.random() > 0.7) {
+                this.ctx.fillStyle = ['#FF6B6B', '#FFD166', '#FF4081'][Math.floor(Math.random() * 3)];
+                this.ctx.beginPath();
+                this.ctx.arc(tipX, tipY - 5, 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            this.ctx.restore();
+        });
+
+        // Мелкие детали на земле (камушки, комочки земли)
+        this.drawGroundDetails();
+    }
+
+    drawGroundDetails() {
+        // Рисуем мелкие детали на земле
+        for (let i = 0; i < 20; i++) {
+            const x = Math.random() * this.canvas.width;
+            const y = this.ground.y - 5 + Math.random() * 5;
+            const size = Math.random() * 3 + 1;
+
+            this.ctx.fillStyle = ['#795548', '#5D4037', '#4E342E'][Math.floor(Math.random() * 3)];
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, size, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+    }
+
     drawNewPlayer() {
         const theme = this.colorThemes[this.currentTheme];
         const width = this.player.width;
@@ -839,7 +972,7 @@ class GeometryDash {
         this.ctx.roundRect(-width / 2, -height / 2, width, height, 15);
         this.ctx.stroke();
 
-        // ГЛАЗА
+        // ГЛАЗЫ
         this.ctx.fillStyle = '#FFFFFF';
         this.ctx.beginPath();
         this.ctx.arc(-width / 4, -height / 4, 6, 0, Math.PI * 2);
@@ -1058,6 +1191,24 @@ class GeometryDash {
         if (this.gameState === 'playing') {
             requestAnimationFrame(() => this.gameLoop());
         }
+    }
+}
+
+// Добавляем поддержку roundRect для CanvasRenderingContext2D (если не поддерживается)
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, width, height, radius) {
+        if (width < 2 * radius) radius = width / 2;
+        if (height < 2 * radius) radius = height / 2;
+
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.arcTo(x + width, y, x + width, y + height, radius);
+        this.arcTo(x + width, y + height, x, y + height, radius);
+        this.arcTo(x, y + height, x, y, radius);
+        this.arcTo(x, y, x + width, y, radius);
+        this.closePath();
+
+        return this;
     }
 }
 
